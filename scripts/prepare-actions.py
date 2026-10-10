@@ -8,6 +8,9 @@ import sys
 
 def main():
     from unified_schedule.google_routing import calendar_targets
+    if not os.getenv("GOOGLE_ADE_CALENDAR_ID", "").strip() or not os.getenv("GOOGLE_WORKFORCE_CALENDAR_ID", "").strip():
+        print("::error::Ajoutez les deux Repository secrets GOOGLE_ADE_CALENDAR_ID et GOOGLE_WORKFORCE_CALENDAR_ID. Le retour à l'ancien agenda est bloqué après migration.")
+        return 1
     try:
         if not all(calendar_targets(os.environ).values()):
             raise ValueError()

@@ -12,7 +12,11 @@ def main():
                             capture_output=True, text=True, check=False)
     if result.returncode:
         output = result.stdout + result.stderr
-        if "session has expired" in output or "Manual login" in output or "manual login" in output:
+        if "Existing ID is cancelled or moved" in output:
+            message = "Un identifiant appartient à un événement déplacé/annulé. Vérifiez GOOGLE_ADE_CALENDAR_ID (EILCO) et GOOGLE_WORKFORCE_CALENDAR_ID (Domino's) dans Repository secrets ; n'utilisez pas l'ancien agenda."
+        elif "Existing ID cannot be safely matched" in output:
+            message = "L'événement existant ne peut pas être reconnu avec certitude. Aucun doublon créé ; vérification manuelle nécessaire."
+        elif "session has expired" in output or "Manual login" in output or "manual login" in output:
             message = "Session Workforce à renouveler sur votre PC, puis remplacez WORKFORCE_STATE_JSON."
         elif "Google Calendar API returned HTTP" in output:
             match = re.search(r"Google Calendar API returned HTTP (\d{3}) \(([A-Za-z]+)\)\.", output)

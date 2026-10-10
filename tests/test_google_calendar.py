@@ -163,6 +163,34 @@ class AccessTests(unittest.TestCase):
 
 class SyncTests(unittest.TestCase):
     @patch("unified_schedule.google_sync.time.sleep")
+    def test_duplicate_insert_recovers_matching_event_without_second_insert(self, sleep):
+        from googleapiclient.errors import HttpError
+        from httplib2 import Response
+        from unified_schedule.google_sync import apply_plan
+        event = example()
+        service = MagicMock()
+        service.events.return_value.insert.return_value.execute.side_effect = HttpError(
+            Response({"status": "409"}), b'{"error":{"errors":[{"reason":"duplicate"}]}}')
+        stored = {**event_payload(event), "id": "us" + event_key(event)}
+        service.events.return_value.get.return_value.execute.return_value = stored
+        self.assertEqual(apply_plan(service, "selected", build_preview([event], [], remote_checked=True)), {"unchanged": 1})
+        service.events.return_value.patch.assert_not_called()
+        stored.pop("extendedProperties")
+        self.assertEqual(apply_plan(service, "selected", build_preview([event], [], remote_checked=True)), {"update": 1})
+        self.assertIn("extendedProperties", service.events.return_value.patch.call_args.kwargs["body"])
+
+    def test_cancelled_id_never_resurrected_and_unrelated_event_never_modified(self):
+        from unified_schedule.google_sync import recover_existing
+        service = MagicMock()
+        payload = {**event_payload(example()), "id": "us" + event_key(example())}
+        for stored in ({"id": payload["id"], "status": "cancelled"},
+                       {**payload, "summary": "Someone else", "extendedProperties": {}}):
+            service.events.return_value.get.return_value.execute.return_value = stored
+            with self.assertRaises(GoogleCalendarError):
+                recover_existing(service, "selected", payload)
+        service.events.return_value.patch.assert_not_called()
+
+    @patch("unified_schedule.google_sync.time.sleep")
     def test_rate_limits_retry_but_permissions_do_not(self, sleep):
         from googleapiclient.errors import HttpError
         from httplib2 import Response
