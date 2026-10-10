@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from googleapiclient.errors import HttpError
 
-from unified_schedule.google_preview import event_key
+from unified_schedule.google_preview import event_key, event_payload, _canonical_time
 from unified_schedule.google_routing import calendar_targets
 from unified_schedule.google_sync import execute_write, error_reason
 from unified_schedule.integrations.google_calendar import (
@@ -15,6 +15,37 @@ from unified_schedule.integrations.google_calendar import (
     calendar_service, get_credentials, list_calendars, list_managed_events,
 )
 from unified_schedule.storage import list_events
+
+
+def repair_plan(events, rows):
+    expected = {"us" + event_key(event): event for event in events}
+    repairs = []
+    for row in rows:
+        event = expected.get(row.get("id"))
+        if event is None:
+            continue
+        if row.get("extendedProperties", {}).get("private", {}).get(KEY_PROPERTY) == event_key(event):
+            continue
+        payload = event_payload(event)
+        if row.get("summary") != event.title or any(
+            _canonical_time(row.get(field, {})) != _canonical_time(payload[field]) for field in ("start", "end")
+        ):
+            raise GoogleCalendarError("A destination event cannot be safely recognized for marker restoration.")
+        body = {"extendedProperties": payload["extendedProperties"]}
+        if "colorId" in payload:
+            body["colorId"] = payload["colorId"]
+        repairs.append((row["id"], body))
+    return repairs
+
+
+def destination_events(service, calendar):
+    rows, page = [], None
+    while True:
+        response = service.events().list(calendarId=calendar, maxResults=2500, showDeleted=False, pageToken=page).execute()
+        rows.extend(response.get("items", []))
+        page = response.get("nextPageToken")
+        if not page:
+            return rows
 
 
 def migration_plan(events, remote, destinations, existing):
@@ -53,14 +84,22 @@ def main():
             raise GoogleCalendarError("You must own the original calendar and both destinations.")
         events = list_events(Path(os.getenv("DATABASE_PATH", "data/unified_schedule.sqlite3")))
         remote = list_managed_events(service, origin)
-        existing = {key: list_managed_events(service, key) for key in targets.values()}
+        existing = {key: destination_events(service, key) for key in targets.values()}
+        repairs = [(calendar, event_id, body) for source, calendar in targets.items()
+                   for event_id, body in repair_plan([event for event in events if event.source == source], existing[calendar])]
         moves = migration_plan(events, remote, targets, existing)
         print(f"{len(moves)} événements à déplacer (aucun événement personnel concerné).")
+        print(f"{len(repairs)} marqueurs de migration à rétablir.")
         if not args.apply:
             print("Prévisualisation uniquement. Utilisez --apply pour déplacer.")
             return 0
+        for calendar, event_id, body in repairs:
+            execute_write(service.events().patch(calendarId=calendar, eventId=event_id, body=body))
+            print("Marqueur de migration rétabli.", flush=True)
         for item, destination in moves:
-            execute_write(service.events().move(calendarId=origin, eventId=item["id"], destination=destination))
+            moved = execute_write(service.events().move(calendarId=origin, eventId=item["id"], destination=destination))
+            execute_write(service.events().patch(calendarId=destination, eventId=moved["id"],
+                                                body={"extendedProperties": item["extendedProperties"]}))
             print(f"Déplacé vers {calendars[destination].get('summary', destination)}", flush=True)
         print("Migration terminée. Relancez sync pour vérifier les agendas cibles.")
         return 0
