@@ -8,6 +8,13 @@ from unittest.mock import patch
 
 
 class ActionsRunnerTests(unittest.TestCase):
+    def test_remote_setup_blocks_missing_category_secrets(self):
+        namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "prepare-actions.py"))
+        output = StringIO()
+        with patch.dict("os.environ", {"GOOGLE_ADE_CALENDAR_ID": "old", "GOOGLE_WORKFORCE_CALENDAR_ID": "work"}, clear=True), redirect_stdout(output):
+            self.assertEqual(namespace["main"](), 1)
+        self.assertIn("GOOGLE_ADE_IA_CALENDAR_ID", output.getvalue())
+
     def test_http_diagnostic_preserves_code_without_private_output(self):
         namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "run-actions.py"))
         output = StringIO()

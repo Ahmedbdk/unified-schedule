@@ -7,7 +7,11 @@ import sys
 
 
 def main():
-    from unified_schedule.google_routing import calendar_targets
+    from unified_schedule.google_routing import calendar_targets, CATEGORY_VARIABLES
+    missing_categories = [name for name in CATEGORY_VARIABLES.values() if not os.getenv(name, "").strip()]
+    if missing_categories:
+        print("::error::Ajoutez les Repository secrets des six catégories EILCO. Manquants : " + ", ".join(missing_categories))
+        return 1
     if not os.getenv("GOOGLE_ADE_CALENDAR_ID", "").strip() or not os.getenv("GOOGLE_WORKFORCE_CALENDAR_ID", "").strip():
         print("::error::Ajoutez les deux Repository secrets GOOGLE_ADE_CALENDAR_ID et GOOGLE_WORKFORCE_CALENDAR_ID. Le retour à l'ancien agenda est bloqué après migration.")
         return 1

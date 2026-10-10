@@ -38,7 +38,8 @@ Pour les six catégories EILCO, ajoutez aussi les six **Repository secrets** :
 
 Copiez uniquement la valeur après `=` de chaque ligne correspondante de votre
 `.env`. Ne copiez pas tout le fichier. Configurez les six secrets avant de lancer
-un job : si aucun n'est configuré, le mode à deux agendas reste actif.
+un job : le workflow exige désormais les six catégories pour éviter de revenir
+à l'ancien agenda EILCO après migration.
 La migration `google_migrate --categories --apply` doit être terminée avant le
 premier test et la réactivation de la programmation.
 
