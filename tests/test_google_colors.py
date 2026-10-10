@@ -1,7 +1,8 @@
 from dataclasses import replace
+from datetime import datetime
 import unittest
 
-from unified_schedule.google_colors import ade_category, event_color
+from unified_schedule.google_colors import ade_category, event_color, workforce_category
 from unified_schedule.google_preview import event_payload, build_preview
 from test_google_calendar import example
 
@@ -35,7 +36,26 @@ class ColorTests(unittest.TestCase):
         old["colorId"] = event_color(event)
         self.assertEqual(build_preview([event], [old], remote_checked=True)["counts"], {"unchanged": 1})
 
-    def test_workforce_keeps_calendar_color(self):
+    def test_workforce_normal_has_its_own_color(self):
         event = replace(example(), source="workforce")
-        self.assertIsNone(event_color(event))
-        self.assertNotIn("colorId", event_payload(event))
+        self.assertEqual(event_color(event), "7")
+        self.assertEqual(event_payload(event)["colorId"], "7")
+
+    def test_workforce_local_hours_boundaries_and_precedence(self):
+        cases = [("18:00", "23:00", "close"), ("18:00", "23:30", "close"),
+                 ("18:00", "22:59", "normal"), ("18:00", "23:31", "normal"),
+                 ("18:00", "22:00", "preclose"), ("18:00", "22:30", "preclose"),
+                 ("18:00", "22:31", "normal"), ("11:00", "14:00", "lunch"),
+                 ("10:00", "11:00", "normal"), ("14:00", "16:00", "normal"),
+                 ("10:00", "12:00", "lunch"), ("12:00", "23:00", "close")]
+        for day, offset in (("2026-10-12", "+02:00"), ("2026-12-12", "+01:00")):
+            for start, end, category in cases:
+                with self.subTest(day=day, start=start, end=end):
+                    event = replace(example(), source="workforce", start=datetime.fromisoformat(f"{day}T{start}:00{offset}"),
+                                    end=datetime.fromisoformat(f"{day}T{end}:00{offset}"))
+                    self.assertEqual(workforce_category(event), category)
+
+    def test_workforce_reclassification_updates_existing_color(self):
+        event = replace(example(), source="workforce")
+        old = {**event_payload(event), "id": "existing", "colorId": "11"}
+        self.assertEqual(build_preview([event], [old], remote_checked=True)["counts"], {"update": 1})

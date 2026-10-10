@@ -31,7 +31,12 @@ La catégorie est déduite du titre, puis éventuellement d'une description sans
 ambiguïté ; un événement non reconnu reste bleu. Les couleurs d'origine ADE ne
 sont pas présentes dans l'export utilisé : ce sont des règles de classification.
 La synchronisation remet la couleur prévue si elle a été modifiée manuellement.
-Workforce conserve la couleur de l'agenda Domino's.
+Les shifts Workforce restent dans Domino's et reçoivent une couleur selon les
+heures locales de Calais (`Europe/Paris`) : close rouge si la fin est entre 23h
+et 23h30 incluses, préclose orange entre 22h et 22h30 incluses, midi jaune si le
+shift chevauche 11h–14h, sinon normal bleu turquoise. Close/préclose ont priorité
+sur midi. Finir à 11h ou commencer à 14h ne constitue pas un chevauchement midi.
+Un changement d'horaires met à jour la couleur sans créer un nouvel événement.
 
 Pour séparer les sources, renseignez `GOOGLE_ADE_CALENDAR_ID` (EILCO) et
 `GOOGLE_WORKFORCE_CALENDAR_ID` (Domino's) dans `.env` et dans GitHub Secrets.

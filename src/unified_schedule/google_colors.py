@@ -2,6 +2,8 @@
 
 import re
 import unicodedata
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 
 def normalized(text):
@@ -36,5 +38,28 @@ COLORS = {"ai": "10", "data": "5", "english": "3", "common": "9",
           "exam": "11", "holiday": "8"}
 
 
+WORKFORCE_COLORS = {"close": "11", "preclose": "6", "lunch": "5", "normal": "7"}
+
+
+def workforce_category(event):
+    if event.all_day:
+        return "normal"
+    zone = ZoneInfo("Europe/Paris")
+    start, end = event.start.astimezone(zone), event.end.astimezone(zone)
+    end_time = end.time()
+    if time(23) <= end_time <= time(23, 30):
+        return "close"
+    if time(22) <= end_time <= time(22, 30):
+        return "preclose"
+    day = start.date()
+    while day <= end.date():
+        lunch_start = datetime.combine(day, time(11), zone)
+        lunch_end = datetime.combine(day, time(14), zone)
+        if start < lunch_end and end > lunch_start:
+            return "lunch"
+        day += timedelta(days=1)
+    return "normal"
+
+
 def event_color(event):
-    return COLORS[ade_category(event)] if event.source == "ade" else None
+    return COLORS[ade_category(event)] if event.source == "ade" else WORKFORCE_COLORS[workforce_category(event)]
