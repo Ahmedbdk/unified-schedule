@@ -23,6 +23,8 @@ jobs:
       PYTHONUTF8: '1'
       ADE_ICS_URL: ${{ secrets.ADE_ICS_URL }}
       GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+      GOOGLE_ADE_CALENDAR_ID: ${{ secrets.GOOGLE_ADE_CALENDAR_ID }}
+      GOOGLE_WORKFORCE_CALENDAR_ID: ${{ secrets.GOOGLE_WORKFORCE_CALENDAR_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

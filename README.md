@@ -22,6 +22,41 @@ https://github.com/Ahmedbdk/unified-schedule. Remote access has not been verifie
 
 ## Local setup
 
+### Deux agendas : EILCO et Domino's
+
+Les événements ADE reçoivent une couleur individuelle : parcours IA vert,
+Data Science jaune, anglais/LV1 violet, cours communs/FISE bleu, examens et
+soutenances rouge, vacances/jours fériés gris. Examens et vacances ont priorité.
+La catégorie est déduite du titre, puis éventuellement d'une description sans
+ambiguïté ; un événement non reconnu reste bleu. Les couleurs d'origine ADE ne
+sont pas présentes dans l'export utilisé : ce sont des règles de classification.
+La synchronisation remet la couleur prévue si elle a été modifiée manuellement.
+Workforce conserve la couleur de l'agenda Domino's.
+
+Pour séparer les sources, renseignez `GOOGLE_ADE_CALENDAR_ID` (EILCO) et
+`GOOGLE_WORKFORCE_CALENDAR_ID` (Domino's) dans `.env` et dans GitHub Secrets.
+Les deux valeurs doivent être distinctes. Conservez `GOOGLE_CALENDAR_ID` comme
+identifiant de l'ancien agenda pour la migration. Choisissez les couleurs des
+agendas dans Google Calendar via les trois points à côté de leur nom.
+
+Avant la migration, mettez `ENABLE_REMOTE_SYNC` à `false` et attendez la fin des
+exécutions GitHub en cours. Ne lancez pas `sync` vers les nouveaux agendas avant
+le déplacement : cela créerait des copies que la migration refuserait.
+
+```powershell
+.\.venv\Scripts\python.exe -m unified_schedule.google_calendar calendars
+.\.venv\Scripts\python.exe -m unified_schedule.google_migrate
+.\.venv\Scripts\python.exe -m unified_schedule.google_migrate --apply
+.\.venv\Scripts\python.exe -m unified_schedule.google_calendar sync
+```
+
+La migration ne déplace que les événements marqués par Unified Schedule et
+reconnus dans SQLite. Elle vérifie les deux destinations avant les écritures,
+refuse les doublons et se reprend après une interruption. Les événements
+personnels ne sont pas concernés. Après publication du workflow et configuration
+des deux secrets d'agenda, testez GitHub manuellement puis remettez
+`ENABLE_REMOTE_SYNC` à `true`.
+
 ### Exécution distante avec GitHub Actions
 
 Le workflow `.github/workflows/sync.yml` permet une synchronisation horaire sans

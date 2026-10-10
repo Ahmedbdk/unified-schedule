@@ -18,6 +18,13 @@ Créez les quatre secrets suivants (ne mettez pas les valeurs dans le dépôt) :
 Aucun mot de passe Workforce n'est nécessaire. Le jeton Google contient déjà
 les informations nécessaires au renouvellement : le fichier client OAuth n'est pas requis.
 
+Pour la séparation EILCO / Domino's, ajoutez aussi `GOOGLE_ADE_CALENDAR_ID`
+(identifiant d'EILCO) et `GOOGLE_WORKFORCE_CALENDAR_ID` (identifiant de Domino's).
+Les deux doivent être renseignés ; ils remplacent le calendrier unique pour la
+synchronisation. Conservez l'ancien `GOOGLE_CALENDAR_ID` pour référence.
+Effectuez d'abord la migration locale documentée dans le README, avec
+`ENABLE_REMOTE_SYNC=false`, puis testez le workflow avant de réactiver la variable.
+
 ## Premier test et activation
 
 1. Publiez les fichiers du projet et du workflow sur la branche par défaut après vérification.

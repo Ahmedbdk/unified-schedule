@@ -6,6 +6,7 @@ from hashlib import sha256
 import re
 
 from unified_schedule.events import Event
+from unified_schedule.google_colors import event_color
 from unified_schedule.integrations.google_calendar import (
     APP_NAME, APP_PROPERTY, KEY_PROPERTY, GoogleCalendarError,
 )
@@ -22,12 +23,16 @@ def event_payload(event: Event) -> dict:
             r"(?:\r?\n)?\(Exporté le:\d{2}/\d{2}/\d{4} \d{2}:\d{2}\)\s*\Z", "", description,
         )
     date_key = "date" if event.all_day else "dateTime"
-    return {
+    payload = {
         "summary": event.title, "location": event.location, "description": description,
         "start": {date_key: event.start.isoformat()}, "end": {date_key: event.end.isoformat()},
         "status": "tentative" if event.status.upper() == "TENTATIVE" else "confirmed",
         "extendedProperties": {"private": {APP_PROPERTY: APP_NAME, KEY_PROPERTY: event_key(event)}},
     }
+    color = event_color(event)
+    if color is not None:
+        payload["colorId"] = color
+    return payload
 
 
 def _canonical_time(value: dict) -> tuple[str, str]:
@@ -46,6 +51,7 @@ def _same_event(remote: dict, payload: dict) -> bool:
     return (
         all(remote.get(key, "") == payload[key] for key in ("summary", "description", "location"))
         and remote.get("status", "confirmed") == payload["status"]
+        and ("colorId" not in payload or str(remote.get("colorId", "")) == payload["colorId"])
         and _canonical_time(remote.get("start", {})) == _canonical_time(payload["start"])
         and _canonical_time(remote.get("end", {})) == _canonical_time(payload["end"])
     )

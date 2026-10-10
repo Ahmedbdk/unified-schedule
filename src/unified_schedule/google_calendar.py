@@ -1,6 +1,7 @@
 """Authorize Google, preview changes, and synchronize managed events."""
 
 import argparse
+from collections import Counter
 from datetime import date, datetime, timedelta
 import json
 import os
@@ -18,6 +19,7 @@ from requests.exceptions import RequestException
 
 from unified_schedule.events import EventError
 from unified_schedule.google_preview import build_preview
+from unified_schedule.google_routing import calendar_targets
 from unified_schedule.google_sync import apply_plan, error_reason
 from unified_schedule.integrations.google_calendar import (
     GoogleCalendarError, calendar_service, get_credentials, list_calendars, list_managed_events,
@@ -61,25 +63,40 @@ def main() -> int:
             end = args.end or start + timedelta(days=90)
             database = Path(os.getenv("DATABASE_PATH", "data/unified_schedule.sqlite3"))
             events = list_events(database, start_date=start, end_date=end, timezone_name=timezone_name)
-            calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "").strip()
-            remote = []
+            targets = calendar_targets(os.environ)
+            calendar_ids = list(dict.fromkeys(targets.values()))
+            batches = []
             if not args.offline:
-                if not calendar_id:
+                if not all(calendar_ids):
                     raise GoogleCalendarError("Set GOOGLE_CALENDAR_ID in .env after running the calendars command.")
                 options = {"scopes": WRITE_SCOPES, "token_path": WRITE_TOKEN_PATH} if args.command == "sync" else {}
                 service = calendar_service(get_credentials(**options))
                 calendars = {calendar["id"]: calendar for calendar in list_calendars(service)}
-                if calendar_id not in calendars:
+                if any(calendar_id not in calendars for calendar_id in calendar_ids):
                     raise GoogleCalendarError("Configured calendar ID is not in your accessible calendar list.")
-                if calendars[calendar_id].get("accessRole") not in {"owner", "writer"}:
+                if any(calendars[calendar_id].get("accessRole") not in {"owner", "writer"} for calendar_id in calendar_ids):
                     raise GoogleCalendarError("Choose a calendar where your account has owner or writer access for future synchronization.")
-                remote = list_managed_events(service, calendar_id)
-            result = build_preview(events, remote, remote_checked=not args.offline)
-            result.update(calendar_id=calendar_id or None, from_date=start.isoformat(),
+            # Build every plan before the first write, validating both calendars.
+            for calendar_id in calendar_ids:
+                selected = [event for event in events if targets[event.source] == calendar_id]
+                remote = [] if args.offline else list_managed_events(service, calendar_id)
+                plan = build_preview(selected, remote, remote_checked=not args.offline)
+                plan["calendar_id"] = calendar_id or None
+                batches.append(plan)
+            counts = Counter()
+            for plan in batches:
+                counts.update(plan["counts"])
+            result = {"read_only": True, "remote_checked": not args.offline,
+                      "counts": dict(counts), "items": [dict(item, calendar_id=plan["calendar_id"]) for plan in batches for item in plan["items"]],
+                      "calendars": batches}
+            result.update(from_date=start.isoformat(),
                           to_date_exclusive=end.isoformat(), display_timezone=timezone_name)
             if args.command == "sync":
                 print(f"Synchronizing {len(events)} local events: {result['counts']}", flush=True)
-                result["applied_counts"] = apply_plan(service, calendar_id, result)
+                applied = Counter()
+                for plan in batches:
+                    applied.update(apply_plan(service, plan["calendar_id"], plan))
+                result["applied_counts"] = dict(applied)
                 result["read_only"] = False
                 result["note"] = "Synchronization completed. Missing local events do not imply remote deletion."
             args.output.parent.mkdir(parents=True, exist_ok=True)

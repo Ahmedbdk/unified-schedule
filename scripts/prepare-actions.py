@@ -7,7 +7,14 @@ import sys
 
 
 def main():
-    for name in ("ADE_ICS_URL", "GOOGLE_CALENDAR_ID", "WORKFORCE_STATE_JSON", "GOOGLE_WRITE_TOKEN_JSON"):
+    from unified_schedule.google_routing import calendar_targets
+    try:
+        if not all(calendar_targets(os.environ).values()):
+            raise ValueError()
+    except ValueError:
+        print("::error::Identifiants des agendas manquants ou incohérents.")
+        return 1
+    for name in ("ADE_ICS_URL", "WORKFORCE_STATE_JSON", "GOOGLE_WRITE_TOKEN_JSON"):
         if not os.getenv(name, "").strip():
             print(f"::error::Secret GitHub manquant : {name}")
             return 1
