@@ -1,6 +1,7 @@
 import unittest
 
-from unified_schedule.google_routing import calendar_targets
+from unified_schedule.google_routing import calendar_targets, event_destination, CATEGORY_VARIABLES
+from dataclasses import replace
 from unified_schedule.google_migrate import migration_plan, repair_plan
 from unified_schedule.google_preview import event_payload, event_key
 from unified_schedule.integrations.google_calendar import GoogleCalendarError
@@ -8,6 +9,17 @@ from test_google_calendar import example
 
 
 class RoutingTests(unittest.TestCase):
+    def test_category_routing_and_incomplete_configuration(self):
+        configuration = {variable: category for category, variable in CATEGORY_VARIABLES.items()}
+        configuration["GOOGLE_WORKFORCE_CALENDAR_ID"] = "work"
+        targets = calendar_targets(configuration)
+        self.assertEqual(event_destination(replace(example(), title="CM PARCOURS 1 - IA"), targets), "ai")
+        self.assertEqual(event_destination(replace(example(), title="EXAMEN S9"), targets), "exam")
+        self.assertEqual(event_destination(replace(example(), source="workforce"), targets), "work")
+        del configuration["GOOGLE_ADE_IA_CALENDAR_ID"]
+        with self.assertRaises(GoogleCalendarError):
+            calendar_targets(configuration)
+
     def test_moved_event_markers_can_be_restored_without_creating_events(self):
         event = example()
         row = {**event_payload(event), "id": "us" + event_key(event)}

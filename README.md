@@ -24,6 +24,27 @@ https://github.com/Ahmedbdk/unified-schedule. Remote access has not been verifie
 
 ### Deux agendas : EILCO et Domino's
 
+Pour cocher séparément les catégories EILCO dans Google Calendar, configurez
+les six identifiants `GOOGLE_ADE_IA_CALENDAR_ID`, `GOOGLE_ADE_DATA_CALENDAR_ID`,
+`GOOGLE_ADE_COMMON_CALENDAR_ID`, `GOOGLE_ADE_ENGLISH_CALENDAR_ID`,
+`GOOGLE_ADE_EXAMS_CALENDAR_ID` et `GOOGLE_ADE_HOLIDAYS_CALENDAR_ID` dans `.env`
+et GitHub **Repository secrets**. Les six sont obligatoires dès qu'un seul est
+renseigné. Domino's conserve `GOOGLE_WORKFORCE_CALENDAR_ID`.
+Conservez l'ancien identifiant EILCO dans `GOOGLE_ADE_CALENDAR_ID` pour la migration.
+Avec la programmation suspendue et aucun job en cours, prévisualisez puis appliquez :
+
+```powershell
+.\.venv\Scripts\python.exe -m unified_schedule.google_migrate --categories
+.\.venv\Scripts\python.exe -m unified_schedule.google_migrate --categories --apply
+```
+
+La migration restaure les marqueurs privés après chaque déplacement. Ne lancez
+pas une synchronisation vers les catégories avant la migration. Après validation,
+vous pouvez décocher l'ancien agenda EILCO devenu vide. Si la catégorie d'un
+événement change dans ADE après migration, le déplacement entre catégories n'est
+pas encore automatique ; il faut corriger sa destination avant de synchroniser
+pour éviter une copie dans la nouvelle catégorie.
+
 Les événements ADE reçoivent une couleur individuelle : parcours IA vert,
 Data Science jaune, anglais/LV1 violet, cours communs/FISE bleu, examens et
 soutenances rouge, vacances/jours fériés gris. Examens et vacances ont priorité.

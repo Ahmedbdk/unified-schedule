@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from googleapiclient.errors import HttpError
 
 from unified_schedule.google_preview import event_key, event_payload, _canonical_time
-from unified_schedule.google_routing import calendar_targets
+from unified_schedule.google_routing import calendar_targets, event_destination
 from unified_schedule.google_sync import execute_write, error_reason
 from unified_schedule.integrations.google_calendar import (
     KEY_PROPERTY, GoogleCalendarError, WRITE_SCOPES, WRITE_TOKEN_PATH,
@@ -49,7 +49,7 @@ def destination_events(service, calendar):
 
 
 def migration_plan(events, remote, destinations, existing):
-    identities = {event_key(event): event.source for event in events}
+    identities = {event_key(event): event_destination(event, destinations) for event in events}
     moves = []
     seen = set()
     for item in remote:
@@ -59,8 +59,8 @@ def migration_plan(events, remote, destinations, existing):
         if key in seen:
             raise GoogleCalendarError("Duplicate managed identity in the original calendar.")
         seen.add(key)
-        destination = destinations[identities[key]]
-        if any(entry.get("extendedProperties", {}).get("private", {}).get(KEY_PROPERTY) == key for entry in existing[destination]):
+        destination = identities[key]
+        if any(entry.get("extendedProperties", {}).get("private", {}).get(KEY_PROPERTY) == key or entry.get("id") == "us" + key for entry in existing[destination]):
             raise GoogleCalendarError("An event already exists in both calendars. Resolve the duplicate before migration.")
         if item.get("eventType", "default") != "default" or item.get("recurrence"):
             raise GoogleCalendarError("Unsupported managed event type for migration.")
@@ -71,12 +71,14 @@ def migration_plan(events, remote, destinations, existing):
 def main():
     parser = argparse.ArgumentParser(description="Déplacer les événements gérés vers EILCO et Domino's.")
     parser.add_argument("--apply", action="store_true", help="Effectuer les déplacements (sinon prévisualisation).")
+    parser.add_argument("--categories", action="store_true", help="Déplacer l'ancien agenda EILCO vers les six catégories.")
     args = parser.parse_args()
     load_dotenv(Path.cwd() / ".env")
     try:
         targets = calendar_targets(os.environ)
-        origin = os.getenv("GOOGLE_CALENDAR_ID", "").strip()
-        if not origin or len(set(targets.values())) != 2 or origin in targets.values():
+        origin = os.getenv("GOOGLE_ADE_CALENDAR_ID" if args.categories else "GOOGLE_CALENDAR_ID", "").strip()
+        required_count = 7 if args.categories else 2
+        if not origin or len(set(targets.values())) != required_count or origin in targets.values():
             raise GoogleCalendarError("Keep GOOGLE_CALENDAR_ID as the original calendar and configure two distinct destination calendars.")
         service = calendar_service(get_credentials(scopes=WRITE_SCOPES, token_path=WRITE_TOKEN_PATH))
         calendars = {item["id"]: item for item in list_calendars(service)}
@@ -85,8 +87,8 @@ def main():
         events = list_events(Path(os.getenv("DATABASE_PATH", "data/unified_schedule.sqlite3")))
         remote = list_managed_events(service, origin)
         existing = {key: destination_events(service, key) for key in targets.values()}
-        repairs = [(calendar, event_id, body) for source, calendar in targets.items()
-                   for event_id, body in repair_plan([event for event in events if event.source == source], existing[calendar])]
+        repairs = [(calendar, event_id, body) for calendar in targets.values()
+                   for event_id, body in repair_plan([event for event in events if event_destination(event, targets) == calendar], existing[calendar])]
         moves = migration_plan(events, remote, targets, existing)
         print(f"{len(moves)} événements à déplacer (aucun événement personnel concerné).")
         print(f"{len(repairs)} marqueurs de migration à rétablir.")

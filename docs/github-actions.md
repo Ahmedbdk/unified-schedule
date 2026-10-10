@@ -25,6 +25,23 @@ synchronisation. Conservez l'ancien `GOOGLE_CALENDAR_ID` pour référence.
 Effectuez d'abord la migration locale documentée dans le README, avec
 `ENABLE_REMOTE_SYNC=false`, puis testez le workflow avant de réactiver la variable.
 
+Pour les six catégories EILCO, ajoutez aussi les six **Repository secrets** :
+
+| Agenda | Nom du secret |
+| --- | --- |
+| EILCO – IA | `GOOGLE_ADE_IA_CALENDAR_ID` |
+| EILCO – Data Science | `GOOGLE_ADE_DATA_CALENDAR_ID` |
+| EILCO – Cours communs | `GOOGLE_ADE_COMMON_CALENDAR_ID` |
+| EILCO – Anglais | `GOOGLE_ADE_ENGLISH_CALENDAR_ID` |
+| EILCO – Examens | `GOOGLE_ADE_EXAMS_CALENDAR_ID` |
+| EILCO – Vacances | `GOOGLE_ADE_HOLIDAYS_CALENDAR_ID` |
+
+Copiez uniquement la valeur après `=` de chaque ligne correspondante de votre
+`.env`. Ne copiez pas tout le fichier. Configurez les six secrets avant de lancer
+un job : si aucun n'est configuré, le mode à deux agendas reste actif.
+La migration `google_migrate --categories --apply` doit être terminée avant le
+premier test et la réactivation de la programmation.
+
 ## Premier test et activation
 
 1. Publiez les fichiers du projet et du workflow sur la branche par défaut après vérification.

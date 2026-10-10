@@ -19,7 +19,7 @@ from requests.exceptions import RequestException
 
 from unified_schedule.events import EventError
 from unified_schedule.google_preview import build_preview
-from unified_schedule.google_routing import calendar_targets
+from unified_schedule.google_routing import calendar_targets, event_destination
 from unified_schedule.google_sync import apply_plan, error_reason
 from unified_schedule.integrations.google_calendar import (
     GoogleCalendarError, calendar_service, get_credentials, list_calendars, list_managed_events,
@@ -78,7 +78,7 @@ def main() -> int:
                     raise GoogleCalendarError("Choose a calendar where your account has owner or writer access for future synchronization.")
             # Build every plan before the first write, validating both calendars.
             for calendar_id in calendar_ids:
-                selected = [event for event in events if targets[event.source] == calendar_id]
+                selected = [event for event in events if event_destination(event, targets) == calendar_id]
                 remote = [] if args.offline else list_managed_events(service, calendar_id)
                 plan = build_preview(selected, remote, remote_checked=not args.offline)
                 plan["calendar_id"] = calendar_id or None
