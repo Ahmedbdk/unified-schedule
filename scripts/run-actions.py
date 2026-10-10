@@ -1,6 +1,7 @@
 """Keep personal event details out of GitHub's workflow logs."""
 
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +15,23 @@ def main():
         if "session has expired" in output or "Manual login" in output or "manual login" in output:
             message = "Session Workforce à renouveler sur votre PC, puis remplacez WORKFORCE_STATE_JSON."
         elif "Google Calendar API returned HTTP" in output:
-            message = "Erreur Google Calendar : vérifiez les quotas et l'autorisation Google."
+            match = re.search(r"Google Calendar API returned HTTP (\d{3}) \(([A-Za-z]+)\)\.", output)
+            reasons = {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded",
+                       "forbidden", "forbiddenForNonOrganizer", "insufficientPermissions",
+                       "accessNotConfigured", "duplicate", "backendError", "unknown"}
+            reason = match.group(2) if match and match.group(2) in reasons else "unknown"
+            status = match.group(1) if match else "inconnu"
+            message = f"Erreur Google Calendar HTTP {status} ({reason}). "
+            if reason in {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded"}:
+                message += "Limite Google atteinte : attendez avant de relancer."
+            elif status == "404":
+                message += "Vérifiez les deux identifiants d'agenda dans GitHub Secrets et le compte Google autorisé."
+            elif status == "409":
+                message += "Identifiant déjà présent : ne supprimez rien ; une vérification des marqueurs est nécessaire."
+            elif status == "401" or reason == "insufficientPermissions":
+                message += "Renouvelez l'autorisation d'écriture et remplacez GOOGLE_WRITE_TOKEN_JSON."
+            else:
+                message += "Vérifiez les permissions Google et l'accès aux agendas."
         else:
             message = "Actualisation échouée. Vérifiez les secrets et sessions ; lancez la commande locale pour un diagnostic détaillé."
         print(f"::error::{message}")
