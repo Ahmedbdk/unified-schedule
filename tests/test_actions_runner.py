@@ -8,6 +8,28 @@ from unittest.mock import patch
 
 
 class ActionsRunnerTests(unittest.TestCase):
+    def test_known_failures_have_private_safe_diagnostics(self):
+        namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "run-actions.py"))
+        cases = [
+            ("Google authorization or token refresh failed", "GOOGLE_WRITE_TOKEN_JSON"),
+            ("No usable session.", "WORKFORCE_STATE_JSON"),
+            ("Login needs verification or corrected credentials.", "WORKFORCE_STATE_JSON"),
+            ("ADE download failed", "Téléchargement ADE"),
+            ("ADE download timed out", "Téléchargement ADE"),
+            ("ADE returned HTTP 503; expected 200.", "ADE HTTP 503"),
+            ("ADE did not return an ICS calendar", "calendrier ICS"),
+            ("Configured calendar ID is not in your accessible calendar list.", "GOOGLE_*_CALENDAR_ID"),
+            ("browser or schedule request failed", "Chromium"),
+        ]
+        for error, expected in cases:
+            with self.subTest(error=error):
+                output = StringIO()
+                result = SimpleNamespace(returncode=1, stdout="PRIVATE_EVENT_NAME", stderr=error + " PRIVATE_TOKEN")
+                with patch("subprocess.run", return_value=result), redirect_stdout(output):
+                    self.assertEqual(namespace["main"](), 1)
+                self.assertIn(expected, output.getvalue())
+                self.assertNotIn("PRIVATE", output.getvalue())
+
     def test_remote_setup_blocks_missing_category_secrets(self):
         namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "prepare-actions.py"))
         output = StringIO()
