@@ -160,6 +160,21 @@ class ParseTests(unittest.TestCase):
         with self.assertRaises(WorkforceError):
             parse_schedule_html(empty_frame().replace(" complete", ""), WEEK, TODAY)
 
+    def test_observed_english_empty_week_with_paragraph_and_holiday(self):
+        html = frame(
+            '<span>No upcoming shifts</span>'
+            "<p>Once you're rostered to work, you'll see your shifts here.</p>"
+            '<p data-test-id="holiday">Holiday notice</p>', source=False,
+        )
+        self.assertEqual(parse_schedule_html(html, WEEK, TODAY), [])
+        for invalid in (
+            html.replace("<p>Once you're rostered to work, you'll see your shifts here.</p>", ""),
+            html.replace('</turbo-frame>', '<div id="schedule_100">Changed layout</div></turbo-frame>'),
+            html.replace('</turbo-frame>', '<form><input type="password"></form></turbo-frame>'),
+        ):
+            with self.subTest(html=invalid), self.assertRaises(WorkforceError):
+                parse_schedule_html(invalid, WEEK, TODAY)
+
     def test_empty_heading_alone_or_changed_card_is_not_confirmed_empty(self):
         for html in (
             frame("<span>Aucun quart de travail à venir</span>"),

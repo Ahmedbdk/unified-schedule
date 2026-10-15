@@ -218,10 +218,16 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         # Match the observed empty-state heading and explanatory sentence,
         # not just the absence of cards. Holiday notices may also be present.
         loaded = not frame.attrs.get("src") or "complete" in frame.attrs
-        messages = [_plain(node.text()) for node in frame.walk() if node.tag == "span"]
-        recognized_empty = (
-            messages.count("aucun quart de travail a venir") == 1
-            and "une fois que votre travail sera planifie, vous verrez vos quarts de travail ici." in messages
+        messages = [_plain(node.text()) for node in frame.walk() if node.tag in {"span", "p"}]
+        empty_messages = (
+            ("aucun quart de travail a venir",
+             "une fois que votre travail sera planifie, vous verrez vos quarts de travail ici."),
+            ("no upcoming shifts",
+             "once you're rostered to work, you'll see your shifts here."),
+        )
+        recognized_empty = any(
+            messages.count(heading) == 1 and explanation in messages
+            for heading, explanation in empty_messages
         )
         suspicious = any(
             node.tag in {"form", "input", "script"}
