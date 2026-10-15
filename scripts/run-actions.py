@@ -7,6 +7,32 @@ import subprocess
 import sys
 
 
+def safe_failure_context(output):
+    """Use fixed stage names and source-code literals, never raw child output."""
+    import ast
+
+    stages = {
+        "1/5": "ADE", "2/5": "Workforce", "3/5": "SQLite",
+        "4/5": "Conflits", "5/5": "Google Calendar",
+    }
+    reached = re.findall(r"^([1-5]/5)\b", output, re.MULTILINE)
+    stage = stages[reached[-1]] if reached else "Démarrage"
+    # Only complete, literal exception messages from our own code are safe to
+    # publish. Formatted strings can contain event names, IDs, or credentials.
+    messages = set()
+    root = Path(__file__).resolve().parents[1] / "src" / "unified_schedule"
+    for path in root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call):
+                continue
+            if node.exc.args and isinstance(node.exc.args[0], ast.Constant):
+                value = node.exc.args[0].value
+                if isinstance(value, str) and f"Error: {value}" in output:
+                    messages.add(value)
+    return f"Étape : {stage}. " + " ".join(sorted(messages))
+
+
 def main():
     result = subprocess.run([sys.executable, "-m", "unified_schedule.sync", "--non-interactive"],
                             capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
@@ -19,6 +45,7 @@ def main():
         elif any(marker in output for marker in (
             "session has expired", "Manual login", "manual login", "No usable session.",
             "Login needs verification or corrected credentials.",
+            "Workforce requires a fresh login",
         )):
             message = "Session Workforce à renouveler sur votre PC, puis remplacez WORKFORCE_STATE_JSON."
         elif "Google authorization or token refresh failed" in output:
@@ -55,7 +82,8 @@ def main():
                 message += "Vérifiez les permissions Google et l'accès aux agendas."
         else:
             message = "Actualisation échouée. Vérifiez les secrets et sessions ; lancez la commande locale pour un diagnostic détaillé."
-        print(f"::error::{message}")
+        context = safe_failure_context(output)
+        print(f"::error::{message} {context}")
         return 1
     report = json.loads(Path("data/google-sync.json").read_text(encoding="utf-8"))
     print(f"Synchronisation terminée : {report['applied_counts']}")

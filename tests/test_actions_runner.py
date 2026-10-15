@@ -8,6 +8,20 @@ from unittest.mock import patch
 
 
 class ActionsRunnerTests(unittest.TestCase):
+    def test_fallback_reports_stage_and_only_static_error_messages(self):
+        namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "run-actions.py"))
+        output = StringIO()
+        result = SimpleNamespace(
+            returncode=1,
+            stdout="1/5 — ADE\n2/5 — Workforce\nPRIVATE_EVENT_NAME",
+            stderr="Error: The personal schedule frame is missing; check login and page layout.\nError: PRIVATE_TOKEN",
+        )
+        with patch("subprocess.run", return_value=result), redirect_stdout(output):
+            self.assertEqual(namespace["main"](), 1)
+        self.assertIn("Étape : Workforce", output.getvalue())
+        self.assertIn("The personal schedule frame is missing", output.getvalue())
+        self.assertNotIn("PRIVATE", output.getvalue())
+
     def test_known_failures_have_private_safe_diagnostics(self):
         namespace = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "run-actions.py"))
         cases = [
