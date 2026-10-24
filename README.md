@@ -302,11 +302,12 @@ error if manual interaction is needed. It does not open a visible login browser,
 prompt, or replace your export in that case. This prepares
 the command for later automation; no scheduled jobs are configured yet.
 
-By default, the command includes shifts starting today or later, inspecting up
-to four Monday-to-Sunday weeks and stopping at the first confirmed empty week.
-It saves the shifts already collected instead of failing. This matches a
-schedule normally published two or three weeks ahead. To change the maximum
-lookahead or use an earlier starting date:
+By default, the command includes planned shifts starting today or later,
+inspecting up to four Monday-to-Sunday weeks and stopping at the first confirmed
+empty week. Weeks containing only completed work do not stop the search. It saves
+the shifts already collected instead of failing. This matches a schedule normally
+published two or three weeks ahead. To change the maximum lookahead or use an
+earlier starting date:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unified_schedule.workforce --weeks 6
@@ -318,6 +319,8 @@ it is not a rolling number of seven-day periods from that date. The JSON records
 the requested interval, the number of weeks actually checked, and whether it
 stopped at an empty week or the week limit. `checked_end_date_exclusive` marks
 the actual checked range; `first_empty_week` identifies the stopping week.
+`worked_shift_count` counts completed-work cards encountered across checked weeks;
+these cards are excluded from `shifts` and `shift_count`.
 An empty week may mean no assigned shifts or unpublished shifts; the command
 does not distinguish these, and later weeks are not checked after it.
 Use `--output data/another.json`
@@ -338,20 +341,29 @@ observed `/mobile_app/schedules/me/YYYY-MM-DD/list` frame for each requested wee
 this is an ordinary personal-schedule page, not the denied API token endpoint.
 No browser clicks modify shifts or select the Team schedule.
 
-Dates are extracted from each card separately and resolved against its requested
+Dates are extracted from each planned card and resolved against its requested
 week, including French relative dates and year rollover. Both 24-hour times
-and AM/PM times (such as `7 PM - 11:30 PM`) are supported. Schedule IDs are
-preserved for later duplicate handling. Times use APP_TIMEZONE; end times earlier
-than start times are treated as ending the following day. Duration badges are
+and AM/PM times (such as `7 PM - 11:30 PM`) are supported. Planned cards use
+`schedule_N` IDs. Completed-work cards use `shift_N` within `edit_shift_N` and
+are counted separately, rather than exported as new planned events. The original
+schedule IDs are preserved so completed work does not create duplicate Google
+events. Times use APP_TIMEZONE; end times earlier than start times are treated
+as ending the following day. Duration badges are
 not used to calculate end times, since they may reflect breaks.
 
-The observed empty-state heading "Aucun quart de travail à venir" and its
-explanatory sentence identify a confirmed empty week; holiday notices are
-allowed alongside them. A blank or loading frame is not enough to confirm an
+The known French and English empty-state headings and their explanatory
+sentences identify a confirmed empty week; holiday notices are allowed alongside
+them. A blank or loading frame is not enough to confirm an
 empty week. Unknown layouts fail the export
 and leave an existing result untouched. The same applies to missing fields,
 access failures, duplicate IDs, and ambiguous daylight-saving times.
 Login and loading pages are not treated as confirmed empty schedules.
+
+The error `No shift cards found, but this is not a recognized empty week` can
+indicate an unsupported page layout; it does not establish that the session or
+secrets have expired. Run the exporter locally for a detailed diagnosis before
+replacing authentication data.
+
 Live runs verified manual authentication, personal-frame retrieval across
 multiple weeks, and successful stopping at the first empty week. Offline tests
 also cover the supplied empty-state layout and both 24-hour and AM/PM times.

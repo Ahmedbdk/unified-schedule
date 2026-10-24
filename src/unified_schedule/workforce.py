@@ -44,6 +44,7 @@ def main() -> int:
         week_start = start - timedelta(days=start.weekday())
         end_exclusive = week_start + timedelta(weeks=args.weeks)
         weeks_checked = 0
+        worked_shift_count = 0
         first_empty_week = None
         shifts = {}
         with sync_playwright() as playwright:
@@ -54,13 +55,14 @@ def main() -> int:
                 for index in range(args.weeks):
                     monday = week_start + timedelta(weeks=index)
                     print(f"Reading personal schedule for week {monday.isoformat()}...")
-                    weekly_shifts = first_week if index == 0 else fetch_week(context, monday, zone_name)
+                    week = first_week if index == 0 else fetch_week(context, monday, zone_name)
                     weeks_checked += 1
-                    if not weekly_shifts:
+                    worked_shift_count += week.worked_shift_count
+                    if week.is_empty:
                         first_empty_week = monday
                         print(f"No shifts for week {monday.isoformat()}; stopping and saving collected shifts.")
                         break
-                    for shift in weekly_shifts:
+                    for shift in week.shifts:
                         if not start <= shift.start.date() < end_exclusive:
                             continue
                         if shift.schedule_id in shifts and shifts[shift.schedule_id] != shift:
@@ -72,6 +74,7 @@ def main() -> int:
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "start_date": start.isoformat(), "end_date_exclusive": end_exclusive.isoformat(),
             "weeks_requested": args.weeks, "shift_count": len(ordered),
+            "worked_shift_count": worked_shift_count,
             "weeks_checked": weeks_checked,
             "first_empty_week": first_empty_week.isoformat() if first_empty_week else None,
             "checked_end_date_exclusive": (week_start + timedelta(weeks=weeks_checked)).isoformat(),

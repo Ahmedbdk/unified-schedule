@@ -65,6 +65,18 @@ localement avec `python -m unified_schedule.workforce --login`, puis remplacez
 et remplacez `GOOGLE_WRITE_TOKEN_JSON`. Le mode OAuth Google « Testing » peut imposer
 une expiration du jeton de renouvellement après sept jours.
 
+L'erreur Workforce `No shift cards found, but this is not a recognized empty week`
+peut signaler une structure de page non reconnue ; elle ne prouve pas que les
+secrets ou la session ont expiré. Lancez localement
+`python -m unified_schedule.workforce --non-interactive` pour obtenir le diagnostic
+détaillé avant de renouveler les secrets. Le planning personnel distingue les
+shifts prévus (`schedule_N`) des cartes de travail effectué (`shift_N` dans
+`edit_shift_N`). Ces dernières sont comptées dans `worked_shift_count` du JSON,
+sans créer de nouveaux événements Google. Une semaine contenant uniquement du
+travail effectué laisse la recherche continuer ; la première semaine vide
+confirmée, reconnue en français ou en anglais, l'arrête toujours. Les identifiants
+des shifts prévus restent inchangés pour éviter les doublons.
+
 Chaque machine GitHub est neuve : SQLite et les exports sont reconstruits à chaque
 exécution, sans historique SQLite persistant. Google conserve les événements et
 leurs identifiants stables, ce qui permet de les reconnaître sans doublons.

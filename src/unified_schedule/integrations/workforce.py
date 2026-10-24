@@ -164,6 +164,23 @@ class WorkShift:
         }
 
 
+@dataclass(frozen=True)
+class ScheduleWeek:
+    """Planned shifts plus evidence that a week contains completed work.
+
+    Workforce's worked-shift IDs are unrelated to planned schedule IDs.
+    Keep them out of exported events, without mistaking a worked-only week
+    for an empty week and stopping before upcoming schedules.
+    """
+
+    shifts: list[WorkShift]
+    worked_shift_count: int = 0
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.shifts and self.worked_shift_count == 0
+
+
 def _field_text(card: _Element, classes: set[str]) -> str:
     matches = [node for node in card.walk() if node.tag == "span"
                and classes <= set((node.attrs.get("class") or "").split())]
@@ -195,7 +212,7 @@ def personal_week(src: str) -> date:
 
 
 def parse_schedule_html(html: str, week_start: date, observed_on: date,
-                        timezone: str = "Europe/Paris") -> list[WorkShift]:
+                        timezone: str = "Europe/Paris") -> ScheduleWeek:
     """Extract cards independently; accept empty frames only when fully loaded."""
     if week_start.weekday() != 0:
         raise WorkforceError("The requested week must start on Monday.")
@@ -213,7 +230,8 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
     if frame.attrs.get("src") and personal_week(frame.attrs["src"]) != week_start:
         raise WorkforceError("The returned schedule frame belongs to a different week.")
     cards = [node for node in frame.walk()
-             if (node.attrs.get("data-test-id") or "").startswith("schedule_")]
+             if any((node.attrs.get(attribute) or "").startswith(("schedule_", "shift_"))
+                    for attribute in ("data-test-id", "id"))]
     if not cards:
         # Match the observed empty-state heading and explanatory sentence,
         # not just the absence of cards. Holiday notices may also be present.
@@ -231,16 +249,30 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         )
         suspicious = any(
             node.tag in {"form", "input", "script"}
-            or node.attrs.get("id", "").startswith("schedule_")
-            or node.attrs.get("data-test-id", "").startswith("schedule")
+            or (node.attrs.get("id") or "").startswith(("schedule_", "shift_", "edit_shift_"))
+            or (node.attrs.get("data-test-id") or "").startswith(("schedule", "shift"))
             for node in frame.walk()
         )
         if loaded and recognized_empty and not suspicious:
-            return []
+            return ScheduleWeek([])
         raise WorkforceError("No shift cards found, but this is not a recognized empty week. Check the page layout.")
     shifts = {}
+    worked_ids = set()
     for card in cards:
-        match = re.fullmatch(r"schedule_(\d+)", card.attrs["data-test-id"])
+        marker = card.attrs.get("data-test-id") or ""
+        if marker.startswith("shift_"):
+            match_worked = re.fullmatch(r"shift_(\d+)", marker)
+            if not match_worked or card.tag != "article" or card.attrs.get("id") != marker:
+                raise WorkforceError("A worked shift card has an invalid ID or layout.")
+            label = _field_text(card, {"font-bold", "text-xl"})
+            day = parse_date_label(label, week_start, observed_on)
+            if day > observed_on:
+                raise WorkforceError("A worked shift is dated in the future; check the page layout.")
+            if match_worked[1] in worked_ids:
+                raise WorkforceError("Duplicate worked shift ID in a week; export aborted.")
+            worked_ids.add(match_worked[1])
+            continue
+        match = re.fullmatch(r"schedule_(\d+)", marker)
         if not match or card.attrs.get("id") != match[0]:
             raise WorkforceError("A shift card has an invalid schedule ID.")
         label = _field_text(card, {"font-bold", "text-xl"})
@@ -267,10 +299,13 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         if shift.schedule_id in shifts:
             raise WorkforceError("Duplicate schedule ID in a week; export aborted.")
         shifts[shift.schedule_id] = shift
-    return sorted(shifts.values(), key=lambda shift: (shift.start.timestamp(), shift.schedule_id))
+    return ScheduleWeek(
+        sorted(shifts.values(), key=lambda shift: (shift.start.timestamp(), shift.schedule_id)),
+        worked_shift_count=len(worked_ids),
+    )
 
 
-def fetch_week(context, week_start: date, timezone: str = "Europe/Paris") -> list[WorkShift]:
+def fetch_week(context, week_start: date, timezone: str = "Europe/Paris") -> ScheduleWeek:
     """Use the browser's logged-in cookies to read its personal HTML frame."""
     zone = ZoneInfo(timezone)
     observed_on = datetime.now(zone).date()
@@ -288,9 +323,9 @@ def fetch_week(context, week_start: date, timezone: str = "Europe/Paris") -> lis
             ):
                 raise WorkforceSessionExpired(f"Workforce requires a fresh login (HTTP {response.status}).")
             raise WorkforceError(f"Personal schedule returned HTTP {response.status}; check login and access.")
-        shifts = parse_schedule_html(response.text(), week_start, observed_on, timezone)
+        week = parse_schedule_html(response.text(), week_start, observed_on, timezone)
         if datetime.now(zone).date() != observed_on:
             raise WorkforceError("The date changed while downloading; rerun to resolve relative dates safely.")
-        return shifts
+        return week
     finally:
         response.dispose()
