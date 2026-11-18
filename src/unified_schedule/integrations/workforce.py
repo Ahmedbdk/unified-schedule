@@ -258,6 +258,16 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         raise WorkforceError("No shift cards found, but this is not a recognized empty week. Check the page layout.")
     shifts = {}
     worked_ids = set()
+    # New list layout groups cards under day headings outside each card.
+    # Record the nearest preceding heading in frame order, never infer dates.
+    card_dates = {}
+    heading = None
+    card_nodes = {id(card) for card in cards}
+    for node in frame.walk():
+        if node.attrs.get("data-test-id") == "day-heading":
+            heading = parse_date_label(node.text(), week_start, observed_on)
+        if id(node) in card_nodes:
+            card_dates[id(node)] = heading
     for card in cards:
         marker = card.attrs.get("data-test-id") or ""
         if marker.startswith("shift_"):
@@ -275,9 +285,19 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         match = re.fullmatch(r"schedule_(\d+)", marker)
         if not match or card.attrs.get("id") != match[0]:
             raise WorkforceError("A shift card has an invalid schedule ID.")
-        label = _field_text(card, {"font-bold", "text-xl"})
-        day = parse_date_label(label, week_start, observed_on)
-        hours = _field_text(card, {"text-base", "font-bold"})
+        time_fields = [node for node in card.walk()
+                       if node.attrs.get("data-test-id") == "shift-time"]
+        if time_fields:
+            if len(time_fields) != 1 or not time_fields[0].text():
+                raise WorkforceError("A shift card time is missing or ambiguous.")
+            day = card_dates[id(card)]
+            if day is None:
+                raise WorkforceError("A shift card is missing its day heading.")
+            hours = time_fields[0].text()
+        else:
+            label = _field_text(card, {"font-bold", "text-xl"})
+            day = parse_date_label(label, week_start, observed_on)
+            hours = _field_text(card, {"text-base", "font-bold"})
         clock_pattern = r"\d{1,2}(?::\d{2})?(?:\s*(?:AM|PM))?"
         match_hours = re.fullmatch(
             rf"({clock_pattern})\s*[-–—]\s*({clock_pattern})", hours, re.IGNORECASE,
@@ -293,7 +313,21 @@ def parse_schedule_html(html: str, week_start: date, observed_on: date,
         end_day = day + timedelta(days=1) if end_clock < start_clock else day
         start = _local_datetime(day, start_clock, zone)
         end = _local_datetime(end_day, end_clock, zone)
-        text = _field_text(card, {"text-sm", "text-gray-800"})
+        if time_fields:
+            # Avatar initials also use text-sm/text-gray-800 in this layout.
+            # The role label belongs to the flex items-baseline row.
+            labels = [child.text() for node in card.walk()
+                      if node.tag == "div" and {"flex", "items-baseline"}
+                      <= set((node.attrs.get("class") or "").split())
+                      for child in node.children if isinstance(child, _Element)
+                      and child.attrs.get("data-test-id") != "shift-time"
+                      and child.tag == "span" and {"text-sm", "text-gray-800"}
+                      <= set((child.attrs.get("class") or "").split())]
+            if len(labels) != 1 or not labels[0]:
+                raise WorkforceError("A shift card role is missing or ambiguous.")
+            text = labels[0]
+        else:
+            text = _field_text(card, {"text-sm", "text-gray-800"})
         role, separator, location = text.partition(" @ ")
         shift = WorkShift(match[1], start, end, role, location if separator else "", text)
         if shift.schedule_id in shifts:

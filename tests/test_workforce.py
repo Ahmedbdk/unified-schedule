@@ -82,6 +82,32 @@ class DateTests(unittest.TestCase):
 
 
 class ParseTests(unittest.TestCase):
+    def test_grouped_cards_use_day_headings_and_explicit_shift_time(self):
+        def grouped(identifier):
+            return f'''<a><div data-test-id="schedule_{identifier}" id="schedule_{identifier}">
+              <span class="text-base font-bold text-gray-800 truncate">You</span>
+              <div class="flex items-baseline justify-between"><span data-test-id="shift-time" class="text-sm font-bold text-gray-800">7:15 PM - 11:30 PM</span></div>
+              <span class="font-medium select-none text-sm text-gray-800">AB</span>
+              <div class="flex items-baseline"><span class="text-gray-800 text-sm">Role @ Test location</span></div>
+              <span data-test-id="shift-hours">4.25 hrs</span>
+            </div></a>'''
+        first = '<h3><span data-test-id="day-heading">sam, 10 oct.</span><span>Aujourd\'hui</span></h3>'
+        second = '<h3><span data-test-id="day-heading">dim, 11 oct.</span></h3>'
+        html = frame(first, grouped("100"), grouped("101"), second, grouped("102"))
+        shifts = parse_schedule_html(html, WEEK, TODAY).shifts
+        self.assertEqual([s.start.isoformat() for s in shifts], [
+            "2026-10-10T19:15:00+02:00", "2026-10-10T19:15:00+02:00",
+            "2026-10-11T19:15:00+02:00",
+        ])
+        self.assertTrue(all(s.end.hour == 23 and s.end.minute == 30 for s in shifts))
+        for invalid in (
+            frame(grouped("100")),
+            frame(first, grouped("100").replace('</div>', '<span data-test-id="shift-time">9 PM - 10 PM</span></div>')),
+            frame(first.replace("sam, 10 oct.", "unknown"), grouped("100")),
+        ):
+            with self.subTest(html=invalid), self.assertRaises(WorkforceError):
+                parse_schedule_html(invalid, WEEK, TODAY)
+
     def test_two_cards_keep_dates_and_ids_separate(self):
         html = frame(card(), card("101", "dim, 11 oct.", "19:45 - 23:30"))
         result = parse_schedule_html(html, WEEK, TODAY)
